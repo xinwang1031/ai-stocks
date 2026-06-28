@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent基础设施深度分析 — AI Stock Trends</title>
+<style>
+
+/* ===== RESET & BASE ===== */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #09090b;
+    color: #e4e4e7;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    line-height: 1.75;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ===== LAYOUT ===== */
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+}
+
+/* ===== NAVIGATION (sticky glass) ===== */
+.nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(9, 9, 11, 0.75);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.nav-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #a1a1aa;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nav-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+/* ===== HEADINGS ===== */
+h1 {
+    font-size: 2.2em;
+    font-weight: 800;
+    line-height: 1.3;
+    margin: 24px 0 20px;
+    background: linear-gradient(135deg, #f0f0ff 0%, #a5b4fc 40%, #818cf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h2 {
+    font-size: 1.55em;
+    font-weight: 700;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+    background: linear-gradient(135deg, #e0e7ff 0%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h3 {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 32px 0 12px;
+    color: #c7d2fe;
+}
+
+h4 {
+    font-size: 1.05em;
+    font-weight: 600;
+    margin: 24px 0 8px;
+    color: #a5b4fc;
+}
+
+/* ===== PARAGRAPHS & INLINE ===== */
+p {
+    margin: 12px 0;
+}
+
+strong {
+    color: #fafafa;
+    font-weight: 700;
+}
+
+em {
+    color: #d4d4d8;
+}
+
+a {
+    color: #818cf8;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+a:hover {
+    border-bottom-color: #818cf8;
+}
+
+code {
+    background: rgba(255, 255, 255, 0.06);
+    color: #f59e0b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* ===== BLOCKQUOTES ===== */
+blockquote.report-quote {
+    background: #0f0f12;
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin: 20px 0;
+    color: #a1a1aa;
+    font-size: 0.95em;
+}
+
+blockquote.report-quote p {
+    margin: 4px 0;
+}
+
+blockquote.report-quote strong {
+    color: #e4e4e7;
+}
+
+/* ===== CODE BLOCKS ===== */
+pre.code-block {
+    background: #0f0f12;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+    font-size: 0.9em;
+    line-height: 1.6;
+    color: #d4d4d8;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* ===== HORIZONTAL RULES ===== */
+hr.section-divider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.35), transparent);
+    margin: 40px 0;
+}
+
+/* ===== LISTS ===== */
+ul, ol {
+    margin: 12px 0 12px 24px;
+}
+
+li {
+    margin: 6px 0;
+    color: #d4d4d8;
+}
+
+li strong {
+    color: #fafafa;
+}
+
+/* ===== TABLES ===== */
+.table-wrapper {
+    overflow-x: auto;
+    margin: 20px 0;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrapper::-webkit-scrollbar {
+    height: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+table.stock-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88em;
+    min-width: 600px;
+    background: #0c0c10;
+}
+
+table.stock-table thead {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+table.stock-table th {
+    padding: 14px 12px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.85em;
+    color: #a5b4fc;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.25);
+    white-space: nowrap;
+}
+
+table.stock-table td {
+    padding: 12px 12px;
+    border-bottom: 1px solid #1e1e24;
+    color: #d4d4d8;
+    vertical-align: top;
+}
+
+table.stock-table tbody tr {
+    transition: background-color 0.15s;
+}
+
+table.stock-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.06);
+}
+
+table.stock-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Center-align specific columns (the library uses align attributes) */
+table.stock-table th[align="center"],
+table.stock-table td[align="center"] {
+    text-align: center;
+}
+
+table.stock-table th[align="right"],
+table.stock-table td[align="right"] {
+    text-align: right;
+}
+
+/* ===== FOOTER ===== */
+.report-footer {
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    color: #71717a;
+    font-size: 0.85em;
+    text-align: center;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px 16px 60px;
+    }
+
+    h1 {
+        font-size: 1.6em;
+    }
+
+    h2 {
+        font-size: 1.25em;
+    }
+
+    table.stock-table {
+        font-size: 0.78em;
+    }
+
+    .nav {
+        padding: 12px 16px;
+    }
+}
+
+/* ===== PRINT ===== */
+@media print {
+    body {
+        background: #fff;
+        color: #111;
+    }
+
+    .nav {
+        display: none;
+    }
+}
+
+.nav .active { color: #38bdf8; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">📈 AI Stock Trends</a>
+    <div class="nav-links">
+      <a href="index.html">Dashboard</a>
+      <a href="huawei-ascend-supply-chain.html">🔬 昇腾供应链</a>
+      <a href="ai-storage-supply-chain.html">💾 存储供应链</a>
+      <a href="ai-agent-infra.html" class="active">⚡ Agent基础设施</a>
+    </div>
+  </div>
+</nav>
+<main class="report-container">
+<h1>AI Agent浪潮下的算力基础设施 — A股CPU/服务器/云服务深度投资分析报告</h1>
+<blockquote class="report-quote">
+<p><strong>日期</strong>：2026年6月28日<br />
+<strong>分析师</strong>：AI Stock Trend 研究院<br />
+<strong>核心结论</strong>：2026年AI Agent正式进入规模化落地元年——从"对话式AI"到"行动式AI"的范式跃迁，正在重塑从芯片到云服务的整个基础设施价值链。<strong>容器化推理、ARM服务器生态成熟、国产替代加速</strong>构成三大主线。A股市场中，<strong>浪潮信息（AI服务器龙头）</strong>、<strong>中科曙光（国产算力旗舰）</strong>、<strong>紫光股份（新华三/交换机）</strong>、<strong>英维克（数据中心温控）</strong> 和 <strong>神州数码（鲲鹏昇腾生态核心分销商）</strong> 构成最强受益组合。</p>
+</blockquote>
+<hr />
+<h2>一、AI Agent对基础设施的新需求：范式跃迁的底层逻辑</h2>
+<h3>1.1 从"对话"到"行动"：AI Agent带来的三大变化</h3>
+<p>2026年，以Anthropic Claude、Google Gemini 2.5、DeepSeek V4、字节豆包1.5 Pro为代表的Agent框架全面落地。AI Agent与传统LLM推理有着本质区别：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>传统LLM推理</th>
+<th>AI Agent推理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>推理模式</strong></td>
+<td>单次请求-响应</td>
+<td>多步链式推理（Chain-of-Thought + 工具调用）</td>
+</tr>
+<tr>
+<td><strong>平均Token消耗</strong></td>
+<td>500-2K tokens/次</td>
+<td>5K-50K tokens/任务（含工具调用上下文）</td>
+</tr>
+<tr>
+<td><strong>并发特征</strong></td>
+<td>短时峰值，可预测</td>
+<td>长时间持续占用（Agent会话持续数分钟至小时）</td>
+</tr>
+<tr>
+<td><strong>延迟要求</strong></td>
+<td>首Token &lt;500ms</td>
+<td>多步骤端到端 &lt;2s（含工具执行）</td>
+</tr>
+<tr>
+<td><strong>部署模式</strong></td>
+<td>集中式云端推理</td>
+<td>边缘+云协同，就近部署</td>
+</tr>
+<tr>
+<td><strong>资源调度</strong></td>
+<td>无状态，弹性伸缩</td>
+<td>有状态，需会话保持（容器亲和性）</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>核心结论</strong>：AI Agent的推理负载比传统LLM重5-20倍，且对延迟、资源持久性和弹性调度提出全新要求。这些变化直接驱动了基础设施的三大变革方向。</p>
+<hr />
+<h3>1.2 变革一：容器化推理 — AI Agent的"原生"部署范式</h3>
+<h4>1.2.1 为什么AI Agent必须容器化？</h4>
+<p>AI Agent的典型架构包含多个协同组件：</p>
+<pre><code>┌─────────────────────────────────────────────────────┐
+│                 AI Agent Runtime                     │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │ LLM推理   │  │ 工具调用  │  │ 记忆/知识库      │  │
+│  │ 容器       │  │ 容器      │  │ 容器（向量DB）    │  │
+│  │ GPU:1-8卡 │  │ CPU:2-4核 │  │ CPU:8-16核       │  │
+│  └───────────┘  └──────────┘  └──────────────────┘  │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │ 代码执行   │  │ 浏览器   │  │ 安全沙箱          │  │
+│  │ 容器       │  │ 渲染容器  │  │ 容器              │  │
+│  │ CPU:4-8核 │  │ CPU:2核   │  │ CPU:1核           │  │
+│  └───────────┘  └──────────┘  └──────────────────┘  │
+└─────────────────────────────────────────────────────┘
+        ↕  Kubernetes + Volcano/Volcano-vgpu
+┌─────────────────────────────────────────────────────┐
+│        异构计算集群（GPU + CPU + NPU）                 │
+└─────────────────────────────────────────────────────┘
+</code></pre>
+<p>Agent的每个组件天然适合容器化部署：独立扩缩容、独立版本管理、独立安全边界。Kubernetes已成为AI Agent部署的事实标准，而<strong>Volcano（华为开源的K8s批量调度器）</strong> 是国内智算中心调度的事实标准。</p>
+<h4>1.2.2 A股映射：容器生态基础设施</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>环节</th>
+<th>公司</th>
+<th>股票代码</th>
+<th>核心逻辑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>容器平台/云原生</strong></td>
+<td>青云科技</td>
+<td>688316.SH</td>
+<td>KubeSphere容器平台，金融/政企信创容器化核心供应商</td>
+</tr>
+<tr>
+<td><strong>K8s发行版</strong></td>
+<td>博云（未上市）</td>
+<td>—</td>
+<td>国内领先的容器PaaS厂商</td>
+</tr>
+<tr>
+<td><strong>GPU虚拟化/池化</strong></td>
+<td>趋动科技（未上市）</td>
+<td>—</td>
+<td>OrionX GPU池化方案，与浪潮/曙光深度合作</td>
+</tr>
+<tr>
+<td><strong>智算调度系统</strong></td>
+<td>中科曙光</td>
+<td>603019.SH</td>
+<td>自研ParaStor + 容器化AI平台</td>
+</tr>
+<tr>
+<td><strong>智算中心运营</strong></td>
+<td>润泽科技</td>
+<td>300442.SZ</td>
+<td>AIDC大规模部署K8s集群，服务字节/快手</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>1.3 变革二：ARM服务器 — 中国算力自主化的"第二战场"</h3>
+<h4>1.3.1 x86到ARM的算力版图重构</h4>
+<p>2026年，中国服务器市场正在经历深刻的CPU架构迁移：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>指标</th>
+<th style="text-align: center;">2023年</th>
+<th style="text-align: center;">2024年</th>
+<th style="text-align: center;">2025年</th>
+<th style="text-align: center;">2026年E</th>
+<th style="text-align: center;">2028年E</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>中国服务器出货量（万台）</strong></td>
+<td style="text-align: center;">~380</td>
+<td style="text-align: center;">~420</td>
+<td style="text-align: center;">~480</td>
+<td style="text-align: center;">~550</td>
+<td style="text-align: center;">~700</td>
+</tr>
+<tr>
+<td><strong>ARM服务器占比</strong></td>
+<td style="text-align: center;">~8%</td>
+<td style="text-align: center;">~12%</td>
+<td style="text-align: center;">~18%</td>
+<td style="text-align: center;"><strong>~25%</strong></td>
+<td style="text-align: center;">~40%</td>
+</tr>
+<tr>
+<td><strong>信创服务器占比（政府/国企）</strong></td>
+<td style="text-align: center;">~15%</td>
+<td style="text-align: center;">~25%</td>
+<td style="text-align: center;">~35%</td>
+<td style="text-align: center;"><strong>~50%</strong></td>
+<td style="text-align: center;">~80%</td>
+</tr>
+<tr>
+<td><strong>AI服务器出货占比</strong></td>
+<td style="text-align: center;">~8%</td>
+<td style="text-align: center;">~12%</td>
+<td style="text-align: center;">~18%</td>
+<td style="text-align: center;"><strong>~25%</strong></td>
+<td style="text-align: center;">~35%</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>三大驱动力：</strong></p>
+<ol>
+<li><strong>信创政策驱动</strong>：2027年央国企关键系统全面国产化Deadline，ARM路线是主力选择</li>
+<li><strong>AI推理爆发</strong>：ARM CPU在推理场景的能效比优势（同等算力功耗低30-50%）使其成为AI边缘推理首选</li>
+<li><strong>英伟达替代需求</strong>：Grace-Hopper（ARM CPU+GPU）的成功验证，推动ARM进入AI数据中心</li>
+</ol>
+<h4>1.3.2 为什么AI Agent天然偏好ARM？</h4>
+<ul>
+<li><strong>高并发低功耗</strong>：Agent的细粒度微服务组件大量使用CPU，ARM的多核高并发+低功耗特性完美匹配</li>
+<li><strong>容器亲和性</strong>：ARM的硬件虚拟化能力（SVE/SVE2向量扩展）与容器化推理天然契合</li>
+<li><strong>边缘部署</strong>：Agent需要贴近用户的边缘算力，ARM的边缘成本优势明显</li>
+</ul>
+<hr />
+<h3>1.4 变革三：国产替代 — 从"可用"到"好用"的质变</h3>
+<p>2026年，国产CPU/GPU/NPU生态进入"好用"阶段：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>国产替代环节</th>
+<th>2023年状态</th>
+<th>2026年状态</th>
+<th>关键突破</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>服务器CPU</strong></td>
+<td>鲲鹏/飞腾初步可用</td>
+<td>鲲鹏920B性能接近Intel Sapphire Rapids 70%</td>
+<td>7nm全国产化量产</td>
+</tr>
+<tr>
+<td><strong>AI训练芯片</strong></td>
+<td>昇腾910B小批量</td>
+<td>昇腾950PR大规模量产，性能对标H100 80%</td>
+<td>中芯N+2/N+3良率95%+</td>
+</tr>
+<tr>
+<td><strong>AI推理芯片</strong></td>
+<td>寒武纪思元590初期</td>
+<td>思元690+云端推理规模化部署</td>
+<td>软件栈CAMBRICON成熟</td>
+</tr>
+<tr>
+<td><strong>DPU/SmartNIC</strong></td>
+<td>基本空白</td>
+<td>云豹/中科驭数量产</td>
+<td>25G/100G国产DPU落地</td>
+</tr>
+<tr>
+<td><strong>操作系统</strong></td>
+<td>麒麟/统信初步适配</td>
+<td>欧拉/openEuler成服务器OS主流</td>
+<td>生态适配超500万</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2>二、ARM服务器CPU产业链深度拆解</h2>
+<h3>2.1 芯片设计：ARM服务器CPU的"双雄格局"</h3>
+<h4>华为鲲鹏生态</h4>
+<p>华为鲲鹏处理器基于ARM v8.2/v9架构自研核心，是目前国产ARM服务器CPU的绝对主力：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>处理器型号</th>
+<th>制程</th>
+<th style="text-align: center;">核心数</th>
+<th>主频</th>
+<th style="text-align: center;">SPEC CPU 2017</th>
+<th>对标Intel</th>
+<th>量产状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>鲲鹏920</td>
+<td>7nm (台积电)</td>
+<td style="text-align: center;">64核</td>
+<td>2.6 GHz</td>
+<td style="text-align: center;">~490分</td>
+<td>Xeon Gold 6248</td>
+<td>2019-2023（受限）</td>
+</tr>
+<tr>
+<td>鲲鹏920S</td>
+<td>中芯N+1</td>
+<td style="text-align: center;">48核</td>
+<td>2.3 GHz</td>
+<td style="text-align: center;">~380分</td>
+<td>Xeon Silver 4314</td>
+<td>2024-2025</td>
+</tr>
+<tr>
+<td>鲲鹏920B</td>
+<td>中芯N+2</td>
+<td style="text-align: center;">64核</td>
+<td>2.6 GHz</td>
+<td style="text-align: center;"><strong>~520分</strong></td>
+<td>Xeon Gold 6430</td>
+<td>2025-2026</td>
+</tr>
+<tr>
+<td>鲲鹏930（代号）</td>
+<td>中芯N+3</td>
+<td style="text-align: center;">96核</td>
+<td>3.0 GHz</td>
+<td style="text-align: center;">~700分（预计）</td>
+<td>Xeon 6系列</td>
+<td>2027（规划）</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>鲲鹏2026年出货目标</strong>：约150-180万颗（含服务器与边缘），较2025年增长60%+。</p>
+<h4>鲲鹏整机合作伙伴（A股核心标的）</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>鲲鹏业务角色</th>
+<th style="text-align: center;">2026年鲲鹏出货预估</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>神州数码</strong></td>
+<td>000034.SZ</td>
+<td>鲲鹏/昇腾最大分销商+自有品牌"神州鲲泰"服务器</td>
+<td style="text-align: center;">20万+台</td>
+<td>2025年AI服务器营收突破100亿，毛利率触底回升</td>
+</tr>
+<tr>
+<td><strong>四川长虹</strong></td>
+<td>600839.SH</td>
+<td>控股华鲲振宇（鲲鹏+昇腾整机Top3）</td>
+<td style="text-align: center;">18万+台</td>
+<td>华鲲2025年营收突破200亿，华为生态最大黑马</td>
+</tr>
+<tr>
+<td><strong>拓维信息</strong></td>
+<td>002261.SZ</td>
+<td>湘江鲲鹏（华为"昇腾+鲲鹏"双授权）</td>
+<td style="text-align: center;">8万+台</td>
+<td>教育/交通行业信创龙头，华为"昇腾万里"伙伴</td>
+</tr>
+<tr>
+<td><strong>广电运通</strong></td>
+<td>002152.SZ</td>
+<td>广电鲲鹏（金融信创主力）</td>
+<td style="text-align: center;">5万+台</td>
+<td>背靠广州无线电集团，金融/政务信创优势</td>
+</tr>
+<tr>
+<td><strong>同方股份</strong></td>
+<td>600100.SH</td>
+<td>同方鲲鹏服务器</td>
+<td style="text-align: center;">5万+台</td>
+<td>中核集团旗下，信创全产业链</td>
+</tr>
+</tbody>
+</table></div>
+<h4>飞腾生态（中国电子/CEC体系）</h4>
+<p>飞腾CPU是中国电子（CEC）旗下核心ARM CPU品牌，基于ARM v8架构，是信创市场第二大ARM路线：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>处理器型号</th>
+<th>制程</th>
+<th style="text-align: center;">核心</th>
+<th>特点</th>
+<th>量产状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>飞腾FT-2000+/64</td>
+<td>16nm</td>
+<td style="text-align: center;">64核</td>
+<td>第一代服务器CPU</td>
+<td>已停产</td>
+</tr>
+<tr>
+<td>飞腾S2500</td>
+<td>16nm</td>
+<td style="text-align: center;">64核</td>
+<td>双路互联，性能提升</td>
+<td>2021-2024</td>
+</tr>
+<tr>
+<td>飞腾S5000C</td>
+<td>14nm</td>
+<td style="text-align: center;">64核</td>
+<td>性能大幅提升</td>
+<td>2024-2025</td>
+</tr>
+<tr>
+<td>飞腾S6000</td>
+<td>7nm</td>
+<td style="text-align: center;">128核</td>
+<td>新一代高性能CPU</td>
+<td>2026（规划）</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>飞腾生态A股核心标的：</strong></p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>飞腾业务角色</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>中国长城</strong></td>
+<td>000066.SZ</td>
+<td><strong>飞腾CPU第一大股东（28%+）</strong>，整机制造</td>
+<td>2025年整机出货量回升，飞腾股权价值重估</td>
+</tr>
+<tr>
+<td><strong>中国软件</strong></td>
+<td>600536.SH</td>
+<td>麒麟OS + 飞腾信创整机方案</td>
+<td>国产OS龙头，与飞腾深度绑定</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote class="report-quote">
+<p><strong>注</strong>：海光信息（688041.SH）虽为x86路线（AMD Zen1授权），但在信创和AI服务器市场也是核心标的，其深算一号DCU对标英伟达A100。鉴于其x86属性，本文不做重点展开，但建议投资者将海光纳入国产算力整体组合。</p>
+</blockquote>
+<hr />
+<h3>2.2 封测环节：先进封装从"配角"到"主角"</h3>
+<p>ARM服务器CPU（尤其是多Die Chiplet设计）对先进封装的依赖远超传统CPU：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>封装技术</th>
+<th>典型应用</th>
+<th>A股代表公司</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FC-BGA（倒装芯片球栅阵列）</strong></td>
+<td>鲲鹏920/飞腾单Die封装</td>
+<td>长电科技、通富微电</td>
+</tr>
+<tr>
+<td><strong>2.5D Interposer</strong></td>
+<td>多Die互联（CPU+IO Die）</td>
+<td>长电科技</td>
+</tr>
+<tr>
+<td><strong>3D Chiplet堆叠</strong></td>
+<td>鲲鹏930（规划）/AI芯片</td>
+<td>长电科技、通富微电</td>
+</tr>
+<tr>
+<td><strong>FC-CSP</strong></td>
+<td>边缘ARM芯片</td>
+<td>长电科技、华天科技</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th style="text-align: center;">封测产值（2025年）</th>
+<th style="text-align: center;">先进封装占比</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>长电科技</strong></td>
+<td>600584.SH</td>
+<td style="text-align: center;">~360亿元</td>
+<td style="text-align: center;">~40%</td>
+<td>国内先进封装绝对龙头，XDFOI 2.5D/3D平台，深度绑定华为/中芯</td>
+</tr>
+<tr>
+<td><strong>通富微电</strong></td>
+<td>002156.SZ</td>
+<td style="text-align: center;">~250亿元</td>
+<td style="text-align: center;">~30%</td>
+<td>AMD最大封测合作伙伴，Chiplet技术领先，受益于国产CPU多Die趋势</td>
+</tr>
+<tr>
+<td><strong>华天科技</strong></td>
+<td>002185.SZ</td>
+<td style="text-align: center;">~140亿元</td>
+<td style="text-align: center;">~20%</td>
+<td>天水/西安/南京三地布局，Chiplet产线扩建中</td>
+</tr>
+<tr>
+<td><strong>晶方科技</strong></td>
+<td>603005.SH</td>
+<td style="text-align: center;">~15亿元</td>
+<td style="text-align: center;">高</td>
+<td>专注影像传感器封装，受益于AI多模态Agent视觉需求</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>2.3 服务器代工：AI服务器制造"新势力"</h3>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th style="text-align: center;">2025年服务器营收</th>
+<th style="text-align: center;">AI服务器占比</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>浪潮信息</strong></td>
+<td>000977.SZ</td>
+<td style="text-align: center;">~800亿元</td>
+<td style="text-align: center;">~40%</td>
+<td><strong>中国AI服务器绝对龙头</strong>，国内市占率超35%，JDM模式深度绑定字节/阿里/腾讯</td>
+</tr>
+<tr>
+<td><strong>紫光股份</strong></td>
+<td>000938.SZ</td>
+<td style="text-align: center;">~600亿元（含交换机）</td>
+<td style="text-align: center;">~25%</td>
+<td>控股新华三（H3C），交换机+服务器+云全栈，信创服务器出货量第一梯队</td>
+</tr>
+<tr>
+<td><strong>中科曙光</strong></td>
+<td>603019.SH</td>
+<td style="text-align: center;">~180亿元</td>
+<td style="text-align: center;">~50%</td>
+<td>国产算力旗舰，自研ParaStor存储+硅立方液冷+智算中心，国家队定位</td>
+</tr>
+<tr>
+<td><strong>中兴通讯</strong></td>
+<td>000063.SZ</td>
+<td style="text-align: center;">~200亿元（服务器）</td>
+<td style="text-align: center;">~30%</td>
+<td>自研珠峰芯片+GoldenDB数据库，运营商市场服务器出货量前二</td>
+</tr>
+<tr>
+<td><strong>工业富联</strong></td>
+<td>601138.SH</td>
+<td style="text-align: center;">~5,000亿元（含全球）</td>
+<td style="text-align: center;">~35%</td>
+<td>全球最大AI服务器代工商，独家代工英伟达DGX/HGX，微软/Google核心供应商</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>分析要点：</strong></p>
+<ul>
+<li><strong>浪潮信息</strong>的竞争优势在于JDM（联合设计制造）模式——与互联网大客户深度联合定制，交期和成本优势明显。但GPU采购依赖英伟达，受美国出口管制影响最大。</li>
+<li><strong>中科曙光</strong>是国产算力的"国家队"，在信创/智算中心建设上优势不可替代。但其营收规模相对较小，估值溢价较高。</li>
+<li><strong>工业富联</strong>是全球AI服务器代工"隐形冠军"，代工了全球约40%的AI服务器（含英伟达DGX、HGX系列），但其A股流动性较低，主要受母公司鸿海影响。</li>
+</ul>
+<hr />
+<h3>2.4 电源与散热：被低估的AI基础设施"咽喉"</h3>
+<p>AI服务器的功耗暴涨正在将电源和散热从"配角"推向"瓶颈"：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>服务器类型</th>
+<th style="text-align: center;">典型功耗（单台）</th>
+<th>散热方案</th>
+<th>电源需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>传统2U服务器</td>
+<td style="text-align: center;">500-800W</td>
+<td>风冷</td>
+<td>800W冗余电源</td>
+</tr>
+<tr>
+<td>8×A100/H100服务器</td>
+<td style="text-align: center;">4-6kW</td>
+<td>风冷/液冷混合</td>
+<td>6kW冗余电源</td>
+</tr>
+<tr>
+<td>8×B200服务器</td>
+<td style="text-align: center;"><strong>8-12kW</strong></td>
+<td>液冷为主</td>
+<td>12kW+电源</td>
+</tr>
+<tr>
+<td>8×昇腾950PR服务器</td>
+<td style="text-align: center;">6-8kW</td>
+<td>液冷为主</td>
+<td>8kW+电源</td>
+</tr>
+<tr>
+<td>Grace-Blackwell NVL72机柜</td>
+<td style="text-align: center;"><strong>120kW/柜</strong></td>
+<td>全液冷</td>
+<td>专用供电</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>单机柜功率密度的量级跃迁</strong>正在催生全液冷时代。</p>
+<h4>2.4.1 温控/液冷</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th style="text-align: center;">2025年营收</th>
+<th style="text-align: center;">AI温控营收占比</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>英维克</strong></td>
+<td>002837.SZ</td>
+<td style="text-align: center;">~55亿元</td>
+<td style="text-align: center;">~35%</td>
+<td><strong>数据中心温控龙头</strong>，冷板式+浸没式液冷全覆盖，字节/华为/三大运营商核心供应商</td>
+</tr>
+<tr>
+<td><strong>高澜股份</strong></td>
+<td>300499.SZ</td>
+<td style="text-align: center;">~15亿元</td>
+<td style="text-align: center;">~30%</td>
+<td>电力电子热管理专家，浸没式液冷技术领先，华为昇腾服务器液冷配套</td>
+</tr>
+<tr>
+<td><strong>依米康</strong></td>
+<td>300249.SZ</td>
+<td style="text-align: center;">~12亿元</td>
+<td style="text-align: center;">~20%</td>
+<td>数据中心精密空调，百度/阿里间接供应商</td>
+</tr>
+<tr>
+<td><strong>佳力图</strong></td>
+<td>603912.SH</td>
+<td style="text-align: center;">~10亿元</td>
+<td style="text-align: center;">~25%</td>
+<td>精密温控设备，数据中心+5G基站双轮驱动</td>
+</tr>
+<tr>
+<td><strong>同飞股份</strong></td>
+<td>300990.SZ</td>
+<td style="text-align: center;">~18亿元</td>
+<td style="text-align: center;">~15%</td>
+<td>工业温控专家，半导体设备+AI服务器液冷双主线</td>
+</tr>
+</tbody>
+</table></div>
+<h4>2.4.2 服务器电源</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>中国长城</strong></td>
+<td>000066.SZ</td>
+<td>服务器电源老牌供应商，信创+AI双受益</td>
+</tr>
+<tr>
+<td><strong>科华数据</strong></td>
+<td>002335.SZ</td>
+<td>UPS+数据中心电源，自建智算中心</td>
+</tr>
+<tr>
+<td><strong>科士达</strong></td>
+<td>002518.SZ</td>
+<td>UPS龙头，数据中心+新能源双赛道</td>
+</tr>
+<tr>
+<td><strong>欧陆通</strong></td>
+<td>300870.SZ</td>
+<td>服务器电源新势力，AI服务器电源适配器供应商</td>
+</tr>
+<tr>
+<td><strong>麦格米特</strong></td>
+<td>002851.SZ</td>
+<td>定制电源方案，AI服务器电源模块快速放量</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote class="report-quote">
+<p><strong>行业洞察</strong>：液冷不是"可选项"而是"必选项"。2026年中国新建大型数据中心液冷渗透率预计超50%，当前仅约20%，赛道处于爆发前夜。英维克和高澜股份是两匹"冷板凳上的黑马"。</p>
+</blockquote>
+<hr />
+<h2>三、云服务与智算中心产业链</h2>
+<h3>3.1 互联网巨头云：阿里云/华为云/腾讯云的A股映射</h3>
+<p>三大云服务商的资本开支（Capex）是AI基础设施投资的"先行指标"：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>云服务商</th>
+<th style="text-align: center;">2025年Capex（估算）</th>
+<th style="text-align: center;">2026年Capex（估算）</th>
+<th style="text-align: center;">YoY增长</th>
+<th style="text-align: center;">AI基础设施占比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>阿里云</strong></td>
+<td style="text-align: center;">~400亿元</td>
+<td style="text-align: center;">~600亿元</td>
+<td style="text-align: center;">+50%</td>
+<td style="text-align: center;">~60%</td>
+</tr>
+<tr>
+<td><strong>华为云</strong></td>
+<td style="text-align: center;">~300亿元</td>
+<td style="text-align: center;">~500亿元</td>
+<td style="text-align: center;">+67%</td>
+<td style="text-align: center;">~70%</td>
+</tr>
+<tr>
+<td><strong>腾讯云</strong></td>
+<td style="text-align: center;">~250亿元</td>
+<td style="text-align: center;">~380亿元</td>
+<td style="text-align: center;">+52%</td>
+<td style="text-align: center;">~55%</td>
+</tr>
+<tr>
+<td><strong>字节火山引擎</strong></td>
+<td style="text-align: center;">~500亿元</td>
+<td style="text-align: center;">~800亿元</td>
+<td style="text-align: center;">+60%</td>
+<td style="text-align: center;">~75%</td>
+</tr>
+<tr>
+<td><strong>合计（四大）</strong></td>
+<td style="text-align: center;">~1,450亿元</td>
+<td style="text-align: center;">~2,280亿元</td>
+<td style="text-align: center;">+57%</td>
+<td style="text-align: center;">—</td>
+</tr>
+</tbody>
+</table></div>
+<h4>3.1.1 阿里云产业链（A股映射）</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>业务关系</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>数据港</strong></td>
+<td>603881.SH</td>
+<td>阿里云数据中心核心运营商</td>
+<td>深度绑定阿里，"前店后厂"模式，运营阿里云多个超大规模数据中心</td>
+</tr>
+<tr>
+<td><strong>光环新网</strong></td>
+<td>300383.SZ</td>
+<td>AWS中国+阿里云数据中心合作</td>
+<td>北京及环京区域IDC龙头，AI推理边缘节点布局</td>
+</tr>
+<tr>
+<td><strong>万国数据</strong></td>
+<td>GDS (港股)</td>
+<td>阿里云最大第三方数据中心</td>
+<td>国内超大规模IDC龙头，2026年新增AI数据中心超100MW</td>
+</tr>
+</tbody>
+</table></div>
+<h4>3.1.2 华为云产业链（A股映射）</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>业务关系</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>神州数码</strong></td>
+<td>000034.SZ</td>
+<td>华为云总经销商+鲲鹏昇腾整机</td>
+<td>华为生态"全能型"合作伙伴</td>
+</tr>
+<tr>
+<td><strong>软通动力</strong></td>
+<td>301236.SZ</td>
+<td>华为云+鸿蒙+昇腾全方位ISV</td>
+<td>华为软件生态第一大合作伙伴，AI Agent应用落地先锋</td>
+</tr>
+<tr>
+<td><strong>拓维信息</strong></td>
+<td>002261.SZ</td>
+<td>华为云+昇腾鲲鹏</td>
+<td>湖南/贵州/甘肃政务云，华为"昇腾万里"合作伙伴</td>
+</tr>
+</tbody>
+</table></div>
+<h4>3.1.3 腾讯云产业链（A股映射）</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>业务关系</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>东华软件</strong></td>
+<td>002065.SZ</td>
+<td>腾讯云+智慧城市</td>
+<td>腾讯持股5%+，医疗/政务行业数字化龙头</td>
+</tr>
+<tr>
+<td><strong>常山北明</strong></td>
+<td>000158.SZ</td>
+<td>腾讯云+智慧城市</td>
+<td>腾讯云核心ISV，但自身盈利能力较弱</td>
+</tr>
+<tr>
+<td><strong>宝信软件</strong></td>
+<td>600845.SH</td>
+<td>腾讯云数据中心（间接）</td>
+<td>工业互联网+IDC双龙头，宝钢IDC资源独特</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>3.2 独立智算中心：AI时代的"新基建地主"</h3>
+<p>2026年是中国智算中心建设的"大年"。三大运营商+互联网巨头+地方政府三类主体共同驱动投资：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>2026年中国智算中心投资规模</th>
+<th style="text-align: center;">估算</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>三大运营商</td>
+<td style="text-align: center;">~800亿元</td>
+<td>移动/电信/联通各自建设万卡集群</td>
+</tr>
+<tr>
+<td>互联网企业</td>
+<td style="text-align: center;">~1,200亿元</td>
+<td>字节/阿里/腾讯/快手</td>
+</tr>
+<tr>
+<td>地方政府+专项债</td>
+<td style="text-align: center;">~400亿元</td>
+<td>各省智算中心"标配化"</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: center;"><strong>~2,400亿元</strong></td>
+<td>同比增长50-60%</td>
+</tr>
+</tbody>
+</table></div>
+<h4>3.2.1 独立智算中心运营商</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th style="text-align: center;">2025年营收</th>
+<th style="text-align: center;">运营IT负载（MW）</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>润泽科技</strong></td>
+<td>300442.SZ</td>
+<td style="text-align: center;">~65亿元</td>
+<td style="text-align: center;">~600MW</td>
+<td><strong>A股IDC龙头</strong>，字节最大第三方数据中心供应商，廊坊/长三角/大湾区三地超大规模园区</td>
+</tr>
+<tr>
+<td><strong>光环新网</strong></td>
+<td>300383.SZ</td>
+<td style="text-align: center;">~75亿元</td>
+<td style="text-align: center;">~350MW</td>
+<td>北京及环京核心地段IDC资源，高功率AI机柜改造进行中</td>
+</tr>
+<tr>
+<td><strong>奥飞数据</strong></td>
+<td>300738.SZ</td>
+<td style="text-align: center;">~20亿元</td>
+<td style="text-align: center;">~150MW</td>
+<td>南中国IDC新锐，廊坊固安+广州南沙两大AI数据中心</td>
+</tr>
+<tr>
+<td><strong>数据港</strong></td>
+<td>603881.SH</td>
+<td style="text-align: center;">~18亿元</td>
+<td style="text-align: center;">~120MW（主要为阿里定制）</td>
+<td>深度绑定阿里云，确定性高但客户集中风险大</td>
+</tr>
+<tr>
+<td><strong>宝信软件</strong></td>
+<td>600845.SH</td>
+<td style="text-align: center;">~180亿元（含软件）</td>
+<td style="text-align: center;">~100MW</td>
+<td>背靠宝钢，拥有一线城市核心地段IDC资源</td>
+</tr>
+<tr>
+<td><strong>万国数据</strong></td>
+<td>GDS (港股)</td>
+<td style="text-align: center;">~130亿元</td>
+<td style="text-align: center;">~800MW</td>
+<td>国内IDC规模最大，但负债率高，美股退市后港股上市</td>
+</tr>
+</tbody>
+</table></div>
+<h4>3.2.2 智算中心建设/EPC</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>中科曙光</strong></td>
+<td>603019.SH</td>
+<td>智算中心"交钥匙"方案商，全国承建超50个城市智算中心</td>
+</tr>
+<tr>
+<td><strong>浪潮信息</strong></td>
+<td>000977.SZ</td>
+<td>智算中心整体方案，从服务器到调度平台</td>
+</tr>
+<tr>
+<td><strong>紫光股份</strong></td>
+<td>000938.SZ</td>
+<td>新华三承接多地智算中心网络和算力方案</td>
+</tr>
+<tr>
+<td><strong>达实智能</strong></td>
+<td>002421.SZ</td>
+<td>数据中心智能化总包，深圳/成都等地区域龙头</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>3.3 边缘计算：AI Agent的"最后一公里"</h3>
+<p>AI Agent的低延迟要求驱动边缘计算从"可选"变为"刚需"：</p>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th>边缘计算业务</th>
+<th>核心看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>网宿科技</strong></td>
+<td>300017.SZ</td>
+<td>CDN龙头 → 边缘计算平台</td>
+<td>全球2800+边缘节点，推出边缘AI推理服务，与火山引擎合作</td>
+</tr>
+<tr>
+<td><strong>中科创达</strong></td>
+<td>300496.SZ</td>
+<td>边缘AI操作系统+智能模组</td>
+<td>高通核心合作伙伴，边缘AI Agent推理平台TurboX</td>
+</tr>
+<tr>
+<td><strong>广和通</strong></td>
+<td>300638.SZ</td>
+<td>边缘AI通信模组</td>
+<td>5G+AI模组，边缘推理硬件载体</td>
+</tr>
+<tr>
+<td><strong>美格智能</strong></td>
+<td>002881.SZ</td>
+<td>边缘AI算力模组</td>
+<td>高通平台AI模组，无人机/机器人Agent算力底座</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2>四、投资框架与TOP 5推荐</h2>
+<h3>4.1 投资主线梳理</h3>
+<pre><code>AI Agent 基础设施投资地图 v2026H2
+
+┌──────────────────────────────────────────────────────────────┐
+│  主线一：ARM服务器CPU放量    │  主线二：AI服务器/智算中心     │
+│  ┌─────────────────────┐    │  ┌─────────────────────┐      │
+│  │ 浪潮信息  000977.SZ │    │  │ 浪潮信息  000977.SZ │      │
+│  │ 神州数码  000034.SZ │    │  │ 中科曙光  603019.SH │      │
+│  │ 中国长城  000066.SZ │    │  │ 紫光股份  000938.SZ │      │
+│  │ 四川长虹  600839.SH │    │  │ 润泽科技  300442.SZ │      │
+│  │ 长电科技  600584.SH │    │  │ 数据港    603881.SH │      │
+│  └─────────────────────┘    │  └─────────────────────┘      │
+├──────────────────────────────┼──────────────────────────────┤
+│  主线三：液冷/电源            │  主线四：边缘推理/容器         │
+│  ┌─────────────────────┐    │  ┌─────────────────────┐      │
+│  │ 英维克    002837.SZ │    │  │ 网宿科技  300017.SZ │      │
+│  │ 高澜股份  300499.SZ │    │  │ 中科创达  300496.SZ │      │
+│  │ 科华数据  002335.SZ │    │  │ 青云科技  688316.SH │      │
+│  │ 欧陆通    300870.SZ │    │  │ 软通动力  301236.SZ │      │
+│  └─────────────────────┘    │  └─────────────────────┘      │
+└──────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>4.2 TOP 5 推荐标的</h3>
+<h4>🥇 TOP 1：浪潮信息（000977.SZ）— "AI服务器皇冠上的明珠"</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>投资逻辑</strong></td>
+<td>中国AI服务器市占率第一（~35%），深度绑定字节/阿里/腾讯等头部互联网客户。2026年AI服务器出货量预计同比增长50%+，受益于AI Agent推理爆发对GPU/CPU服务器的双重拉动</td>
+</tr>
+<tr>
+<td><strong>关键催化剂</strong></td>
+<td>① 字节跳动2026年800亿Capex中超60%用于AI服务器采购；② 英伟达B200/华为昇腾950PR双路线并行，降低地缘风险；③ 液冷AI服务器出货量翻倍，毛利率回升</td>
+</tr>
+<tr>
+<td><strong>2026E营收/净利</strong></td>
+<td>~1100亿营收 / ~35亿净利（估算）</td>
+</tr>
+<tr>
+<td><strong>风险提示</strong></td>
+<td>GPU供应受美国出口管制影响；互联网客户议价能力强，毛利率承压；存货减值风险</td>
+</tr>
+</tbody>
+</table></div>
+<h4>🥈 TOP 2：中科曙光（603019.SH）— "国产算力的国家队旗舰"</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>投资逻辑</strong></td>
+<td>中科院背景，国产算力全栈自主可控。自研ParaStor存储+硅立方液冷方案+智算中心集成能力，在信创和智算中心建设浪潮中不可替代。2026年全国智算中心建设EPC订单饱满</td>
+</tr>
+<tr>
+<td><strong>关键催化剂</strong></td>
+<td>① 多个城市级智算中心2026年集中交付；② 海光信息（持股）估值持续提升；③ ParaStor分布式存储获得更多AI客户认可</td>
+</tr>
+<tr>
+<td><strong>2026E营收/净利</strong></td>
+<td>~230亿营收 / ~30亿净利（估算）</td>
+</tr>
+<tr>
+<td><strong>风险提示</strong></td>
+<td>估值溢价较高（PE 40-50x）；营收增速低于互联网服务器厂商；部分业务依赖政府项目节奏</td>
+</tr>
+</tbody>
+</table></div>
+<h4>🥉 TOP 3：英维克（002837.SZ）— "AI液冷时代的'卖水人'"</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>投资逻辑</strong></td>
+<td>数据中心温控绝对龙头，冷板式+浸没式液冷全技术路线覆盖。2026年AI服务器液冷需求爆发，单台价值量从风冷的~2000元提升至液冷的~2万元（10x提升）。字节/华为/三大运营商均为核心客户</td>
+</tr>
+<tr>
+<td><strong>关键催化剂</strong></td>
+<td>① 字节2026年新建数据中心全液冷方案；② 华为昇腾950PR标配液冷；③ 海外数据中心液冷订单突破（东南亚/中东）</td>
+</tr>
+<tr>
+<td><strong>2026E营收/净利</strong></td>
+<td>~80亿营收 / ~8亿净利（估算）</td>
+</tr>
+<tr>
+<td><strong>风险提示</strong></td>
+<td>液冷技术路线竞争（冷板 vs 浸没）；新进入者加剧价格战；客户集中于互联网巨头</td>
+</tr>
+</tbody>
+</table></div>
+<h4>④ TOP 4：神州数码（000034.SZ）— "华为鲲鹏昇腾生态的最大受益者"</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>投资逻辑</strong></td>
+<td>华为鲲鹏+昇腾+云三大业务最大分销商，同时拥有自有品牌"神州鲲泰"AI服务器。2025年AI业务营收突破100亿元，华为生态2026年翻倍增长直接受益。与华为云的深度绑定使其在AI Agent行业落地中占据独特渠道优势</td>
+</tr>
+<tr>
+<td><strong>关键催化剂</strong></td>
+<td>① 华为昇腾950PR 2026H2大规模出货；② 鲲鹏服务器信创中标份额持续提升；③ 自有品牌AI服务器毛利率提升</td>
+</tr>
+<tr>
+<td><strong>2026E营收/净利</strong></td>
+<td>~1,500亿营收 / ~18亿净利（估算）</td>
+</tr>
+<tr>
+<td><strong>风险提示</strong></td>
+<td>分销业务毛利率极低（~3-4%），整体盈利能力弱；华为自建渠道风险；对华为生态高度依赖</td>
+</tr>
+</tbody>
+</table></div>
+<h4>⑤ TOP 5：紫光股份（000938.SZ）— "AI时代的全栈ICT基础设施商"</h4>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>维度</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>投资逻辑</strong></td>
+<td>控股新华三（H3C）是国内交换机/路由器/服务器全栈ICT龙头，AI数据中心建设拉动高端交换机（400G/800G）和AI服务器双线增长。新华三在信创服务器市场份额前二，政企客户覆盖深入</td>
+</tr>
+<tr>
+<td><strong>关键催化剂</strong></td>
+<td>① AI数据中心800G交换机2026年大规模部署；② 新华三AI服务器获得更多互联网客户；③ 新华三智算中心网络方案中标多个城市级项目</td>
+</tr>
+<tr>
+<td><strong>2026E营收/净利</strong></td>
+<td>~850亿营收 / ~45亿净利（估算）</td>
+</tr>
+<tr>
+<td><strong>风险提示</strong></td>
+<td>HPE持股新华三股权处置不确定性；交换机芯片（Broadcom）供应链风险；与华为企业业务竞争加剧</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>4.3 弹性标的组合（风险偏好较高）</h3>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>公司</th>
+<th>股票代码</th>
+<th style="text-align: center;">市值（估算）</th>
+<th>弹性逻辑</th>
+<th style="text-align: center;">风险等级</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>高澜股份</strong></td>
+<td>300499.SZ</td>
+<td style="text-align: center;">~60亿</td>
+<td>液冷小市值高弹性，华为昇腾液冷直接配套</td>
+<td style="text-align: center;">★★★★</td>
+</tr>
+<tr>
+<td><strong>川润股份</strong></td>
+<td>002272.SZ</td>
+<td style="text-align: center;">~30亿</td>
+<td>液冷/风冷散热，华为供应商，市值极小弹性大</td>
+<td style="text-align: center;">★★★★★</td>
+</tr>
+<tr>
+<td><strong>欧陆通</strong></td>
+<td>300870.SZ</td>
+<td style="text-align: center;">~40亿</td>
+<td>AI服务器电源新势力，业绩拐点已现</td>
+<td style="text-align: center;">★★★★</td>
+</tr>
+<tr>
+<td><strong>云创数据</strong></td>
+<td>430425.BJ</td>
+<td style="text-align: center;">~15亿</td>
+<td>AI算力+数据存储，北交所最小AI标的</td>
+<td style="text-align: center;">★★★★★</td>
+</tr>
+<tr>
+<td><strong>奥飞数据</strong></td>
+<td>300738.SZ</td>
+<td style="text-align: center;">~80亿</td>
+<td>IDC小市值高成长，AI数据中心布局激进</td>
+<td style="text-align: center;">★★★★</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h3>4.4 投资策略与节奏建议</h3>
+<h4>短期（2026年Q3-Q4）：聚焦"业绩确定性"</h4>
+<p>互联网巨头Capex密集落地 → AI服务器/液冷需求爆发 → 浪潮信息/英维克/紫光股份</p>
+<ul>
+<li><strong>浪潮信息</strong>：字节/阿里AI服务器订单交付高峰期，Q3/Q4业绩有望超预期</li>
+<li><strong>英维克</strong>：数据中心液冷订单进入交付期，单季收入有望创新高</li>
+<li><strong>紫光股份</strong>：800G交换机放量+AI服务器出货增长双驱动</li>
+</ul>
+<h4>中期（2027年）：布局"国产替代加速"</h4>
+<p>信创Deepen + 华为鲲鹏昇腾生态爆发 → 中科曙光/神州数码/中国长城</p>
+<ul>
+<li><strong>中科曙光</strong>：城市智算中心进入运营期，经常性收入占比提升</li>
+<li><strong>神州数码</strong>：鲲鹏930（2027规划）+昇腾950DT双新品周期</li>
+<li><strong>拓维信息</strong>：教育/交通信创进入深水区</li>
+</ul>
+<h4>长期（2028年+）：关注"技术变革红利"</h4>
+<p>液冷全面渗透 + 边缘AI Agent规模化 → 英维克/网宿科技/中科创达</p>
+<ul>
+<li><strong>英维克</strong>：全液冷时代到来，数据中心温控市场空间重估</li>
+<li><strong>网宿科技</strong>：边缘AI推理成为CDN的第二增长曲线</li>
+<li><strong>中科创达</strong>：智能汽车+机器人AI Agent边缘推理平台规模化</li>
+</ul>
+<hr />
+<h3>4.5 风险提示</h3>
+<div class="table-wrapper"><table class="stock-table">
+<thead>
+<tr>
+<th>风险类别</th>
+<th>具体风险</th>
+<th>影响标的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>地缘政治</strong></td>
+<td>美国进一步收紧AI芯片/设备出口管制</td>
+<td>浪潮信息、紫光股份</td>
+</tr>
+<tr>
+<td><strong>技术路线</strong></td>
+<td>ARM服务器生态成熟度不及预期，x86守住份额</td>
+<td>中国长城、神州数码</td>
+</tr>
+<tr>
+<td><strong>需求周期</strong></td>
+<td>互联网Capex增速放缓，AI投资回报不及预期</td>
+<td>全板块</td>
+</tr>
+<tr>
+<td><strong>竞争加剧</strong></td>
+<td>液冷/服务器代工新进入者引发价格战</td>
+<td>英维克、浪潮信息</td>
+</tr>
+<tr>
+<td><strong>估值风险</strong></td>
+<td>A股AI板块整体估值偏高，回调风险</td>
+<td>全板块</td>
+</tr>
+<tr>
+<td><strong>政策变动</strong></td>
+<td>信创政策推进节奏不及预期</td>
+<td>中科曙光、中国长城</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2>免责声明</h2>
+<blockquote class="report-quote">
+<p><strong>本报告由 AI Stock Trend 研究院编制，仅供研究参考，不构成任何投资建议。</strong></p>
+<p>报告中所涉及的公司信息、财务数据和行业判断基于公开信息整理，可能存在滞后或偏差。投资者在做出任何投资决策前，应独立进行尽职调查，并咨询持牌专业投资顾问。</p>
+<p><strong>股市有风险，投资需谨慎。过往表现不代表未来收益。</strong></p>
+</blockquote>
+<hr />
+<blockquote class="report-quote">
+<p><strong>报告生成日期</strong>：2026年6月28日<br />
+<strong>数据截止日期</strong>：2026年6月（基于公开信息及合理估算）<br />
+<strong>下次更新</strong>：2026年Q3财报季后<br />
+<strong>联系方式</strong>：AI Stock Trend 研究院 · ai-stock-trend@research.cn</p>
+</blockquote>
+</main>
+<footer class="report-footer">
+  <p>AI Stock Trends © 2026 · <a href="index.html">返回首页</a></p>
+  <p class="disclaimer">免责声明：本报告基于公开信息整理，仅供研究参考，不构成投资建议。</p>
+</footer>
+</body>
+</html>
